@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sewing Machine Log</title>
+<meta name="theme-color" content="#111">
+
+<style>
+body{margin:0;background:#111;color:#fff;font-family:Arial;display:flex;justify-content:center}
+.container{max-width:420px;width:100%;padding:10px}
+h2{text-align:center;font-size:18px}
+video{width:100%;border-radius:8px}
+
+.controls,.nav{display:flex;justify-content:space-between;margin:8px 0}
+button{font-size:12px;padding:6px 10px;border-radius:5px;border:none}
+.capture{background:#28a745;color:#fff}
+.reset{background:#dc3545;color:#fff}
+.nav button{background:#444;color:#fff}
+
+.install{background:#0d6efd;color:#fff;width:100%;display:none;margin-bottom:6px}
+
+.card{background:#222;margin-bottom:8px;padding:6px;border-radius:8px}
+.card img{width:100%;border-radius:6px}
+.info{font-size:11px;margin:4px 0}
+
+textarea{width:100%;min-height:55px;border-radius:6px;padding:6px;font-size:12px}
+.mic{background:#0d6efd;color:#fff;width:100%;margin-top:4px}
+
+.note{background:#333;padding:4px;border-radius:4px;font-size:11px;margin-top:4px}
+
+.page{display:none}
+.page.active{display:block}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<button id="installBtn" class="install">📲 Install App</button>
+
+<div class="nav">
+  <button onclick="showPage('log')">Log</button>
+  <button onclick="showPage('history')">History</button>
+</div>
+
+<!-- LOG PAGE -->
+<div id="log" class="page active">
+<h2>🧵 Sewing Machine Log</h2>
+<video id="video" autoplay playsinline></video>
+
+<div class="controls">
+  <button class="capture" onclick="capture()">Capture</button>
+  <button class="reset" onclick="resetAll()">Reset</button>
+</div>
+
+<div id="list"></div>
+</div>
+
+<!-- HISTORY PAGE -->
+<div id="history" class="page">
+<h2>📜 History & Voice Notes</h2>
+<div id="historyList"></div>
+</div>
+
+</div>
+
+<canvas id="canvas" hidden></canvas>
+
+<script>
+/* ================= CAMERA ================= */
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"environment"}}})
+.then(s=>video.srcObject=s);
+
+/* ================= DATA ================= */
+let data=JSON.parse(localStorage.getItem("machines"))||[];
+const list=document.getElementById("list");
+const historyList=document.getElementById("historyList");
+
+function save(){localStorage.setItem("machines",JSON.stringify(data));}
+
+/* ================= NAV ================= */
+function showPage(p){
+ document.querySelectorAll(".page").forEach(e=>e.classList.remove("active"));
+ document.getElementById(p).classList.add("active");
+ if(p==="history")renderHistory();
+}
+
+/* ================= CAPTURE ================= */
+function capture(){
+ canvas.width=video.videoWidth;
+ canvas.height=video.videoHeight;
+ ctx.drawImage(video,0,0);
+ const img=canvas.toDataURL("image/png");
+ const now=new Date();
+ data.unshift({
+   img,
+   date:now.toLocaleDateString(),
+   time:now.toLocaleTimeString(),
+   notes:[]
+ });
+ save(); render();
+}
+
+/* ================= LOG LIST ================= */
+function render(){
+ list.innerHTML="";
+ data.forEach(d=>{
+  list.innerHTML+=`
+   <div class="card">
+    <img src="${d.img}">
+    <div class="info">${d.date} ${d.time}</div>
+   </div>`;
+ });
+}
+render();
+
+/* ================= HISTORY ================= */
+function renderHistory(){
+ historyList.innerHTML="";
+ data.forEach((d,i)=>{
+  historyList.innerHTML+=`
+   <div class="card">
+    <img src="${d.img}">
+    <div class="info">${d.date} ${d.time}</div>
+
+    <textarea placeholder="ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ..."></textarea>
+    <button class="mic" onclick="voice(${i})">🎤 Kannada Voice</button>
+
+    ${d.notes.map(n=>`
+      <div class="note">
+        📅 ${n.date} ⏰ ${n.time}<br>${n.text}
+      </div>`).join("")}
+   </div>`;
+ });
+}
+
+/* ================= VOICE ================= */
+function voice(i){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){alert("Voice not supported");return;}
+ const r=new SR();
+ r.lang="kn-IN";
+ r.start();
+ r.onresult=e=>{
+  const now=new Date();
+  data[i].notes.unshift({
+    text:e.results[0][0].transcript,
+    date:now.toLocaleDateString(),
+    time:now.toLocaleTimeString()
+  });
+  save(); renderHistory();
+ };
+}
+
+/* ================= RESET ================= */
+function resetAll(){
+ if(confirm("Delete all records?")){
+  localStorage.clear();
+  data=[];
+  render(); historyList.innerHTML="";
+ }
+}
+
+/* ================= PWA MANIFEST (INLINE) ================= */
+const manifest={
+ name:"Sewing Machine Log",
+ short_name:"SewingLog",
+ start_url:".",
+ display:"standalone",
+ background_color:"#111",
+ theme_color:"#111",
+ icons:[{
+   src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAA",
+   sizes:"192x192",
+   type:"image/png"
+ }]
+};
+const blob=new Blob([JSON.stringify(manifest)],{type:"application/json"});
+const link=document.createElement("link");
+link.rel="manifest";
+link.href=URL.createObjectURL(blob);
+document.head.appendChild(link);
+
+/* ================= SERVICE WORKER (INLINE) ================= */
+if("serviceWorker"in navigator){
+ const sw=`
+ self.addEventListener("install",e=>{
+  e.waitUntil(caches.open("sm-cache")
+   .then(c=>c.addAll(["./"])));
+ });
+ self.addEventListener("fetch",e=>{
+  e.respondWith(
+   caches.match(e.request).then(r=>r||fetch(e.request))
+  );
+ });
+ `;
+ const swBlob=new Blob([sw],{type:"text/javascript"});
+ navigator.serviceWorker.register(URL.createObjectURL(swBlob));
+}
+
+/* ================= INSTALL BUTTON ================= */
+let promptEvent;
+const installBtn=document.getElementById("installBtn");
+window.addEventListener("beforeinstallprompt",e=>{
+ e.preventDefault();
+ promptEvent=e;
+ installBtn.style.display="block";
+});
+installBtn.onclick=()=>{
+ promptEvent.prompt();
+ installBtn.style.display="none";
+};
+</script>
+</body>
+</html>
