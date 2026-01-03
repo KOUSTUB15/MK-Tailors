@@ -29,6 +29,13 @@ textarea{width:100%;min-height:55px;border-radius:6px;padding:6px;font-size:12px
 
 .note{background:#333;padding:4px;border-radius:4px;font-size:11px;margin-top:4px}
 
+.deleteOne{
+  background:#ff4444;
+  color:#fff;
+  width:100%;
+  margin-top:4px;
+}
+
 .page{display:none}
 .page.active{display:block}
 </style>
@@ -51,7 +58,7 @@ textarea{width:100%;min-height:55px;border-radius:6px;padding:6px;font-size:12px
 
 <div class="controls">
   <button class="capture" onclick="capture()">Capture</button>
-  <button class="reset" onclick="resetAll()">Reset</button>
+  <button class="reset" onclick="resetAll()">Reset All</button>
 </div>
 
 <div id="list"></div>
@@ -68,28 +75,27 @@ textarea{width:100%;min-height:55px;border-radius:6px;padding:6px;font-size:12px
 <canvas id="canvas" hidden></canvas>
 
 <script>
-/* ================= CAMERA ================= */
+/* CAMERA */
 const video=document.getElementById("video");
 const canvas=document.getElementById("canvas");
 const ctx=canvas.getContext("2d");
 navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"environment"}}})
 .then(s=>video.srcObject=s);
 
-/* ================= DATA ================= */
+/* DATA */
 let data=JSON.parse(localStorage.getItem("machines"))||[];
 const list=document.getElementById("list");
 const historyList=document.getElementById("historyList");
-
 function save(){localStorage.setItem("machines",JSON.stringify(data));}
 
-/* ================= NAV ================= */
+/* NAV */
 function showPage(p){
  document.querySelectorAll(".page").forEach(e=>e.classList.remove("active"));
  document.getElementById(p).classList.add("active");
  if(p==="history")renderHistory();
 }
 
-/* ================= CAPTURE ================= */
+/* CAPTURE */
 function capture(){
  canvas.width=video.videoWidth;
  canvas.height=video.videoHeight;
@@ -105,7 +111,7 @@ function capture(){
  save(); render();
 }
 
-/* ================= LOG LIST ================= */
+/* LOG LIST */
 function render(){
  list.innerHTML="";
  data.forEach(d=>{
@@ -118,7 +124,7 @@ function render(){
 }
 render();
 
-/* ================= HISTORY ================= */
+/* HISTORY */
 function renderHistory(){
  historyList.innerHTML="";
  data.forEach((d,i)=>{
@@ -126,6 +132,10 @@ function renderHistory(){
    <div class="card">
     <img src="${d.img}">
     <div class="info">${d.date} ${d.time}</div>
+
+    <button class="deleteOne" onclick="deleteMachine(${i})">
+      🗑️ Delete This Machine
+    </button>
 
     <textarea placeholder="ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ..."></textarea>
     <button class="mic" onclick="voice(${i})">🎤 Kannada Voice</button>
@@ -138,7 +148,17 @@ function renderHistory(){
  });
 }
 
-/* ================= VOICE ================= */
+/* DELETE SINGLE MACHINE */
+function deleteMachine(i){
+ if(confirm("Delete this machine and all its notes?")){
+  data.splice(i,1);
+  save();
+  render();
+  renderHistory();
+ }
+}
+
+/* VOICE */
 function voice(i){
  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!SR){alert("Voice not supported");return;}
@@ -156,28 +176,24 @@ function voice(i){
  };
 }
 
-/* ================= RESET ================= */
+/* RESET ALL */
 function resetAll(){
- if(confirm("Delete all records?")){
+ if(confirm("Delete ALL machines?")){
   localStorage.clear();
   data=[];
-  render(); historyList.innerHTML="";
+  render();
+  historyList.innerHTML="";
  }
 }
 
-/* ================= PWA MANIFEST (INLINE) ================= */
+/* INLINE MANIFEST */
 const manifest={
  name:"Sewing Machine Log",
  short_name:"SewingLog",
  start_url:".",
  display:"standalone",
  background_color:"#111",
- theme_color:"#111",
- icons:[{
-   src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAA",
-   sizes:"192x192",
-   type:"image/png"
- }]
+ theme_color:"#111"
 };
 const blob=new Blob([JSON.stringify(manifest)],{type:"application/json"});
 const link=document.createElement("link");
@@ -185,24 +201,22 @@ link.rel="manifest";
 link.href=URL.createObjectURL(blob);
 document.head.appendChild(link);
 
-/* ================= SERVICE WORKER (INLINE) ================= */
+/* INLINE SERVICE WORKER */
 if("serviceWorker"in navigator){
  const sw=`
  self.addEventListener("install",e=>{
-  e.waitUntil(caches.open("sm-cache")
-   .then(c=>c.addAll(["./"])));
+  e.waitUntil(caches.open("sm-cache").then(c=>c.addAll(["./"])));
  });
  self.addEventListener("fetch",e=>{
-  e.respondWith(
-   caches.match(e.request).then(r=>r||fetch(e.request))
-  );
+  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
  });
  `;
- const swBlob=new Blob([sw],{type:"text/javascript"});
- navigator.serviceWorker.register(URL.createObjectURL(swBlob));
+ navigator.serviceWorker.register(URL.createObjectURL(
+  new Blob([sw],{type:"text/javascript"})
+ ));
 }
 
-/* ================= INSTALL BUTTON ================= */
+/* INSTALL BUTTON */
 let promptEvent;
 const installBtn=document.getElementById("installBtn");
 window.addEventListener("beforeinstallprompt",e=>{
